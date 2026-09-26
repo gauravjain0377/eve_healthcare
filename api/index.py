@@ -12,5 +12,6 @@ if str(root_dir) not in sys.path:
 
 from app.main import app
 
-# Export app for Vercel ASGI handler
-__all__ = ["app"]
+# Export app and handler for Vercel ASGI runtime
+handler = app
+__all__ = ["app", "handler"]
