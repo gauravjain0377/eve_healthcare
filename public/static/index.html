@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EVE Healthcare — Diagnostic Booking Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+
+  <!-- ── Navbar ── -->
+  <nav class="navbar">
+    <div class="nav-brand">
+      <div class="brand-icon">+</div>
+      <span class="brand-title">EVE Healthcare</span>
+      <div class="brand-dot"></div>
+      <span class="brand-sub">Diagnostic Portal</span>
+    </div>
+
+    <div class="nav-right">
+      <div class="online-dot">Backend Online</div>
+
+      <div class="user-chip">
+        <span>Signed in as</span>
+        <strong id="current-user-email">—</strong>
+        <span class="role-tag" id="current-user-role">—</span>
+      </div>
+
+      <a href="/docs" target="_blank" class="btn-docs">API Docs ↗</a>
+    </div>
+  </nav>
+
+  <!-- ── Tab Bar ── -->
+  <div class="tabs-bar">
+    <button class="tab-btn active"  onclick="switchTab('tab-catalog')">Centres &amp; Tests</button>
+    <button class="tab-btn"         onclick="switchTab('tab-bookings')">My Bookings</button>
+    <button class="tab-btn"         onclick="switchTab('tab-payments')">Payment Simulator</button>
+    <button class="tab-btn"         onclick="switchTab('tab-webhook')">Webhook Lab</button>
+    <button class="tab-btn"         onclick="switchTab('tab-auth')">Auth &amp; Account</button>
+  </div>
+
+  <!-- ── Main Content ── -->
+  <main class="container">
+
+    <!-- ─── TAB 1: Catalogue ─── -->
+    <section id="tab-catalog" class="tab-content active">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">Diagnostic Centres</h2>
+          <p class="section-desc">Browse centres, view test pricing, and book an appointment.</p>
+        </div>
+        <div class="flex-center gap-8">
+          <select id="city-filter" class="form-select" style="width:160px;" onchange="loadCentres()">
+            <option value="">All Cities</option>
+            <option value="Bangalore">Bangalore</option>
+            <option value="Mumbai">Mumbai</option>
+            <option value="Delhi">Delhi</option>
+          </select>
+          <button class="btn btn-ghost btn-sm" onclick="loadCentres()">Refresh</button>
+        </div>
+      </div>
+
+      <div class="grid-cards" id="centres-container">
+        <div style="grid-column:1/-1; text-align:center; padding:48px; color:var(--text-3);">Loading centres...</div>
+      </div>
+    </section>
+
+    <!-- ─── TAB 2: Bookings ─── -->
+    <section id="tab-bookings" class="tab-content">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">My Bookings</h2>
+          <p class="section-desc">View and manage your diagnostic appointments.</p>
+        </div>
+        <div class="flex-center gap-8">
+          <select id="status-filter" class="form-select" style="width:160px;" onchange="loadBookings()">
+            <option value="">All Statuses</option>
+            <option value="PENDING">Pending</option>
+            <option value="CONFIRMED">Confirmed</option>
+            <option value="FAILED">Failed</option>
+            <option value="CANCELLED">Cancelled</option>
+          </select>
+          <button class="btn btn-ghost btn-sm" onclick="loadBookings()">Refresh</button>
+        </div>
+      </div>
+
+      <div id="bookings-container">
+        <div class="empty-state"><p>No bookings yet.</p></div>
+      </div>
+    </section>
+
+    <!-- ─── TAB 3: Payment Simulator ─── -->
+    <section id="tab-payments" class="tab-content">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">Payment Simulator</h2>
+          <p class="section-desc">Trigger <code style="font-family:monospace; color:var(--text-2);">POST /payments/</code> and inspect the gateway simulation response.</p>
+        </div>
+      </div>
+
+      <div class="two-col">
+        <!-- Left: Form -->
+        <div class="card">
+          <p style="font-size:13px; font-weight:600; color:var(--text-1); margin-bottom:18px;">Trigger Simulated Payment</p>
+
+          <div class="form-group">
+            <label class="form-label">Booking ID</label>
+            <input type="text" id="sim-booking-id" class="form-input" placeholder="Paste a booking UUID here">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Payment Method</label>
+            <select id="sim-payment-method" class="form-select">
+              <option value="SIMULATED_CARD">Credit / Debit Card</option>
+              <option value="UPI">UPI</option>
+              <option value="NET_BANKING">Net Banking</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Outcome Override</label>
+            <select id="sim-outcome" class="form-select">
+              <option value="SUCCESS">SUCCESS — Booking moves to CONFIRMED</option>
+              <option value="FAILED">FAILED — Booking moves to FAILED</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Idempotency Key</label>
+            <div class="flex-center gap-8">
+              <input type="text" id="sim-idemp-key" class="form-input" placeholder="idemp_...">
+              <button class="btn btn-ghost btn-sm" onclick="generateSimIdempKey()" style="white-space:nowrap;">Generate</button>
+            </div>
+            <p class="form-hint">Replay the same key — same transaction is returned, no double charge.</p>
+          </div>
+
+          <button class="btn btn-primary" style="width:100%; margin-top:4px;" onclick="submitSimulatedPayment()">
+            Process Payment
+          </button>
+        </div>
+
+        <!-- Right: Response -->
+        <div class="card">
+          <p style="font-size:13px; font-weight:600; color:var(--text-1); margin-bottom:14px;">API Response</p>
+          <div class="code-block" id="sim-payment-response" style="min-height:260px;">
+// Trigger a payment to see response here
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── TAB 4: Webhook Lab ─── -->
+    <section id="tab-webhook" class="tab-content">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">Webhook &amp; Idempotency Lab</h2>
+          <p class="section-desc">Fire simulated payment provider webhooks and verify strict duplicate protection.</p>
+        </div>
+      </div>
+
+      <div class="two-col">
+        <!-- Left: Controls -->
+        <div class="card">
+          <p style="font-size:13px; font-weight:600; color:var(--text-1); margin-bottom:18px;">Deliver Webhook Event</p>
+
+          <div class="form-group">
+            <label class="form-label">Event ID</label>
+            <div class="flex-center gap-8">
+              <input type="text" id="wh-event-id" class="form-input" value="evt_mock_001">
+              <button class="btn btn-ghost btn-sm" onclick="generateWebhookEventId()" style="white-space:nowrap;">Generate</button>
+            </div>
+            <p class="form-hint">Keep this the same ID to test idempotency.</p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Booking ID</label>
+            <input type="text" id="wh-booking-id" class="form-input" placeholder="Target booking UUID">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Payment Outcome</label>
+            <select id="wh-status" class="form-select">
+              <option value="SUCCESS">payment.succeeded → CONFIRMED</option>
+              <option value="FAILED">payment.failed → FAILED</option>
+            </select>
+          </div>
+
+          <div class="divider" style="margin:20px 0 16px;"></div>
+
+          <div class="flex-center gap-8">
+            <button class="btn btn-primary" style="flex:1;" onclick="sendWebhookOnce()">
+              Send Webhook (1×)
+            </button>
+            <button class="btn btn-ghost" style="flex:1;" onclick="testIdempotency3x()">
+              Test Idempotency (3×)
+            </button>
+          </div>
+
+          <div style="margin-top:14px; padding:12px; background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--r-md);">
+            <p style="font-size:12px; color:var(--text-3); line-height:1.6;">
+              <strong style="color:var(--text-2);">How idempotency works:</strong> The server records each <code style="font-size:11px;">event_id</code> after the first delivery.
+              Re-sending identical events returns <code style="font-size:11px;">duplicate_ignored</code> without creating extra payment rows or changing booking state.
+            </p>
+          </div>
+        </div>
+
+        <!-- Right: Audit Log -->
+        <div class="card">
+          <p style="font-size:13px; font-weight:600; color:var(--text-1); margin-bottom:14px;">Live Audit Log</p>
+          <div class="code-block" id="webhook-audit-log" style="min-height:300px;">
+// Fire a webhook to see idempotency audit log here
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── TAB 5: Auth ─── -->
+    <section id="tab-auth" class="tab-content">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">Auth &amp; Account</h2>
+          <p class="section-desc">Switch between seeded accounts or create a new one.</p>
+        </div>
+      </div>
+
+      <div class="two-col">
+        <!-- Quick Switch -->
+        <div class="card">
+          <p style="font-size:13px; font-weight:600; color:var(--text-1); margin-bottom:14px;">Quick Role Switch</p>
+          <p style="font-size:12px; color:var(--text-3); margin-bottom:14px;">Use pre-seeded accounts to test RBAC differences instantly.</p>
+
+          <div class="role-card">
+            <div>
+              <div class="role-card-name">Patient Account</div>
+              <div class="role-card-email">patient@example.com</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="quickLogin('patient@example.com','password123')">Login</button>
+          </div>
+
+          <div class="role-card">
+            <div>
+              <div class="role-card-name">Admin Supervisor</div>
+              <div class="role-card-email">admin@evehealthcare.com</div>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="quickLogin('admin@evehealthcare.com','admin123')">Login as Admin</button>
+          </div>
+
+          <div class="divider"></div>
+
+          <p style="font-size:12px; color:var(--text-3);">
+            <strong style="color:var(--text-2);">Patient</strong> — can book tests, view own bookings, make payments, cancel own bookings.<br><br>
+            <strong style="color:var(--text-2);">Admin</strong> — can do all of the above plus create centres, add tests, and view all bookings.
+          </p>
+        </div>
+
+        <!-- Register -->
+        <div class="card">
+          <p style="font-size:13px; font-weight:600; color:var(--text-1); margin-bottom:18px;">Register New Account</p>
+
+          <div class="form-group">
+            <label class="form-label">Full Name</label>
+            <input type="text" id="signup-name" class="form-input" placeholder="Sarah Connor">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Email</label>
+            <input type="email" id="signup-email" class="form-input" placeholder="sarah@example.com">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <input type="password" id="signup-password" class="form-input" placeholder="Min 6 characters">
+          </div>
+          <button class="btn btn-primary" style="width:100%;" onclick="handleSignup()">
+            Create Account
+          </button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ── Booking Modal ── -->
+  <div class="modal-overlay" id="booking-modal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 class="modal-title">Book Diagnostic Test</h3>
+        <button class="modal-close" onclick="closeBookingModal()">&#x2715;</button>
+      </div>
+
+      <input type="hidden" id="modal-centre-id">
+      <input type="hidden" id="modal-test-id">
+
+      <div class="form-group">
+        <label class="form-label">Centre</label>
+        <input type="text" id="modal-centre-name" class="form-input" readonly>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Diagnostic Test</label>
+        <input type="text" id="modal-test-name" class="form-input" readonly>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Amount (fixed by centre price)</label>
+        <input type="text" id="modal-price" class="form-input" readonly style="font-family:'JetBrains Mono',monospace; font-weight:600;">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Appointment Date &amp; Time</label>
+        <input type="datetime-local" id="modal-datetime" class="form-input">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Notes (Optional)</label>
+        <input type="text" id="modal-notes" class="form-input" placeholder="e.g. Fasting sample required">
+      </div>
+
+      <div class="flex-center gap-8" style="justify-content:flex-end; margin-top:20px;">
+        <button class="btn btn-ghost" onclick="closeBookingModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="submitBooking()">Confirm Booking</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Toast Container ── -->
+  <div id="toast-container"></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

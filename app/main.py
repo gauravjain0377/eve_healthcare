@@ -59,26 +59,25 @@ app = FastAPI(
 @app.middleware("http")
 async def fix_vercel_path(request: Request, call_next):
     # When Vercel rewrites routes to /api/index.py, restore original client requested path
-    path = request.scope.get("path", "")
-    if path.startswith("/api/index.py"):
-        # 1. Check ASGI raw_uri
-        raw_uri = request.scope.get("raw_uri")
-        if raw_uri:
-            raw_path = raw_uri.decode("latin1", "ignore").split("?")[0]
-            if raw_path and not raw_path.startswith("/api/index.py"):
-                request.scope["path"] = raw_path
-                return await call_next(request)
-
-        # 2. Check proxy forwarding headers
-        for header_name in ["x-forwarded-uri", "x-real-path", "x-invoke-path", "x-matched-path"]:
-            val = request.headers.get(header_name)
-            if val and not val.startswith("/api/index.py"):
-                request.scope["path"] = val.split("?")[0]
-                return await call_next(request)
-
-        stripped = path[len("/api/index.py"):]
-        request.scope["path"] = stripped if stripped else "/"
-
+    orig = request.query_params.get("__orig_path")
+    if orig:
+        request.scope["path"] = orig
+    else:
+        path = request.scope.get("path", "")
+        if path.startswith("/api/index.py"):
+            raw_uri = request.scope.get("raw_uri")
+            if raw_uri:
+                raw_path = raw_uri.decode("latin1", "ignore").split("?")[0]
+                if raw_path and not raw_path.startswith("/api/index.py"):
+                    request.scope["path"] = raw_path
+                    return await call_next(request)
+            for header_name in ["x-forwarded-uri", "x-real-path", "x-invoke-path", "x-matched-path"]:
+                val = request.headers.get(header_name)
+                if val and not val.startswith("/api/index.py"):
+                    request.scope["path"] = val.split("?")[0]
+                    return await call_next(request)
+            stripped = path[len("/api/index.py"):]
+            request.scope["path"] = stripped if stripped else "/"
     return await call_next(request)
 
 app.add_middleware(RequestIDMiddleware)
