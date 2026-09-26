@@ -92,12 +92,16 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 
 import os
+from pathlib import Path
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
+BASE_DIR = Path(__file__).resolve().parent.parent
+STATIC_DIR = BASE_DIR / "static"
+
 # Static Files & Web UI Dashboard
-if os.path.isdir("static"):
-    app.mount("/static", StaticFiles(directory="static"), name="static")
+if STATIC_DIR.is_dir():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
 # Health & Dashboard Endpoints
@@ -115,8 +119,9 @@ def health_check():
 @app.get("/", tags=["System"], include_in_schema=False)
 @app.get("/dashboard", tags=["System"], include_in_schema=False)
 def dashboard():
-    if os.path.exists("static/index.html"):
-        return FileResponse("static/index.html")
+    index_path = STATIC_DIR / "index.html"
+    if index_path.exists():
+        return FileResponse(str(index_path))
     return {
         "status": "healthy",
         "service": settings.PROJECT_NAME,

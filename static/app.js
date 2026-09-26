@@ -1,279 +1,245 @@
-// EVE Healthcare Dashboard Client Logic
+// ── EVE Healthcare Dashboard — JS Logic ──
 
 let authToken = localStorage.getItem("eve_token") || "";
 let currentUser = JSON.parse(localStorage.getItem("eve_user") || "null");
 
-// Initialize on DOM load
 document.addEventListener("DOMContentLoaded", async () => {
   if (!authToken) {
     await quickLogin("patient@example.com", "password123", false);
   } else {
     updateAuthDisplay();
   }
-  
   loadCentres();
   generateSimIdempKey();
   generateWebhookEventId();
-  setDefaultAppointmentTime();
+  setDefaultDatetime();
 });
 
-// --- Tab Switching ---
+// ── Tab Switching ──
 function switchTab(tabId) {
   document.querySelectorAll(".tab-content").forEach(el => el.classList.remove("active"));
   document.querySelectorAll(".tab-btn").forEach(el => el.classList.remove("active"));
 
-  const targetTab = document.getElementById(tabId);
-  if (targetTab) targetTab.classList.add("active");
+  document.getElementById(tabId)?.classList.add("active");
 
-  const btnIndex = {
-    'tab-catalog': 0,
-    'tab-bookings': 1,
-    'tab-payments': 2,
-    'tab-webhook': 3,
-    'tab-auth': 4
-  }[tabId];
+  const order = ["tab-catalog","tab-bookings","tab-payments","tab-webhook","tab-auth"];
+  const idx = order.indexOf(tabId);
+  document.querySelectorAll(".tab-btn")[idx]?.classList.add("active");
 
-  const btns = document.querySelectorAll(".tab-btn");
-  if (btns[btnIndex]) btns[btnIndex].classList.add("active");
-
-  if (tabId === 'tab-bookings') {
-    loadBookings();
-  } else if (tabId === 'tab-catalog') {
-    loadCentres();
-  }
+  if (tabId === "tab-bookings") loadBookings();
+  if (tabId === "tab-catalog")  loadCentres();
 }
 
-// --- Toast Notifications ---
-function showToast(message, type = "info") {
-  const container = document.getElementById("toast-container");
-  const toast = document.createElement("div");
-  toast.className = `toast toast-${type}`;
-  
-  const icon = type === "success" ? "✅" : type === "error" ? "❌" : "ℹ️";
-  toast.innerHTML = `<span>${icon}</span><span>${message}</span>`;
-  
-  container.appendChild(toast);
+// ── Toast ──
+function toast(message, type = "info") {
+  const c = document.getElementById("toast-container");
+  const el = document.createElement("div");
+  el.className = `toast toast-${type}`;
+
+  const icon = type === "success" ? "✓" : type === "error" ? "✗" : "i";
+  el.innerHTML = `<span style="font-weight:700;color:var(--text-2)">${icon}</span><span>${message}</span>`;
+
+  c.appendChild(el);
   setTimeout(() => {
-    toast.style.opacity = "0";
-    toast.style.transform = "translateX(100%)";
-    setTimeout(() => toast.remove(), 250);
+    el.style.transition = "opacity 0.2s, transform 0.2s";
+    el.style.opacity = "0";
+    el.style.transform = "translateX(20px)";
+    setTimeout(() => el.remove(), 220);
   }, 4000);
 }
 
-// --- Auth Handling ---
-async function quickLogin(email, password, showNotification = true) {
+// ── Auth ──
+async function quickLogin(email, password, notify = true) {
   try {
     const res = await fetch("/api/v1/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password })
     });
-
     const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.detail || "Authentication failed.");
-    }
+    if (!res.ok) throw new Error(data.detail || "Login failed");
 
     authToken = data.access_token;
     currentUser = data.user;
     localStorage.setItem("eve_token", authToken);
     localStorage.setItem("eve_user", JSON.stringify(currentUser));
-
     updateAuthDisplay();
-    if (showNotification) {
-      showToast(`Logged in as ${currentUser.full_name} (${currentUser.role})`, "success");
-    }
+    if (notify) toast(`Signed in as ${currentUser.full_name} (${currentUser.role})`, "success");
   } catch (err) {
-    showToast(err.message, "error");
+    toast(err.message, "error");
   }
 }
 
 async function handleSignup() {
-  const fullName = document.getElementById("signup-name").value.trim();
+  const name  = document.getElementById("signup-name").value.trim();
   const email = document.getElementById("signup-email").value.trim();
-  const password = document.getElementById("signup-password").value;
-
-  if (!fullName || !email || !password) {
-    showToast("Please fill all required fields.", "error");
-    return;
-  }
+  const pass  = document.getElementById("signup-password").value;
+  if (!name || !email || !pass) { toast("All fields are required.", "error"); return; }
 
   try {
     const res = await fetch("/api/v1/auth/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ full_name: fullName, email, password, role: "PATIENT" })
+      body: JSON.stringify({ full_name: name, email, password: pass, role: "PATIENT" })
     });
-
     const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.detail || "Registration failed.");
-    }
-
-    showToast("Account created successfully! Logging you in...", "success");
-    await quickLogin(email, password, true);
+    if (!res.ok) throw new Error(data.detail || "Registration failed");
+    toast("Account created. Logging you in…", "success");
+    await quickLogin(email, pass);
   } catch (err) {
-    showToast(err.message, "error");
+    toast(err.message, "error");
   }
 }
 
 function updateAuthDisplay() {
-  if (currentUser) {
-    document.getElementById("current-user-email").textContent = currentUser.email;
-    document.getElementById("current-user-role").textContent = currentUser.role;
-  }
+  if (!currentUser) return;
+  document.getElementById("current-user-email").textContent = currentUser.email;
+  const roleEl = document.getElementById("current-user-role");
+  roleEl.textContent = currentUser.role;
 }
 
-// --- Catalog & Centres ---
+// ── Catalogue ──
 async function loadCentres() {
   const city = document.getElementById("city-filter").value;
-  const container = document.getElementById("centres-container");
-  container.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--text-dim); padding: 2rem;">Loading diagnostic centres...</div>`;
+  const el = document.getElementById("centres-container");
+  el.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:48px;color:var(--text-3);">Loading centres…</div>`;
 
   try {
     const url = city ? `/api/v1/centres/?city=${encodeURIComponent(city)}` : `/api/v1/centres/`;
     const res = await fetch(url);
     const data = await res.json();
+    if (!res.ok) throw new Error(data.detail);
 
-    if (!res.ok) throw new Error(data.detail || "Failed to load centres.");
-
-    if (!data.items || data.items.length === 0) {
-      container.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 2rem;">No diagnostic centres found for selected city.</div>`;
+    if (!data.items?.length) {
+      el.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:48px;color:var(--text-3);">No centres found for the selected city.</div>`;
       return;
     }
 
-    // Fetch full details (tests) for each centre
-    const cardsHtml = await Promise.all(data.items.map(async (centre) => {
-      const detailRes = await fetch(`/api/v1/centres/${centre.id}`);
-      const centreDetail = await detailRes.json();
+    const cards = await Promise.all(data.items.map(async centre => {
+      const dr = await fetch(`/api/v1/centres/${centre.id}`);
+      const detail = dr.ok ? await dr.json() : centre;
 
-      const testsHtml = centreDetail.available_tests && centreDetail.available_tests.length > 0
-        ? centreDetail.available_tests.map(t => `
-            <div class="test-item">
-              <div class="test-info">
-                <h4>${t.name}</h4>
-                <span>Code: ${t.code} | Turnaround: ${t.turnaround_hours}h</span>
+      const tests = detail.available_tests?.length
+        ? detail.available_tests.map(t => `
+            <div class="test-row">
+              <div class="test-row-left">
+                <div class="test-row-name">${t.name}</div>
+                <div class="test-row-meta">${t.code} &middot; ${t.turnaround_hours}h turnaround</div>
               </div>
-              <div class="test-action">
-                <span class="test-price">₹${parseFloat(t.price).toFixed(2)}</span>
-                <button class="btn btn-primary btn-sm" onclick="openBookingModal('${centre.id}', '${escapeHtml(centre.name)}', '${t.test_id}', '${escapeHtml(t.name)}', '${t.price}')">
+              <div class="test-row-right">
+                <span class="test-price">&#x20B9;${parseFloat(t.price).toFixed(2)}</span>
+                <button class="btn btn-primary btn-xs"
+                  onclick="openBookingModal('${centre.id}','${esc(centre.name)}','${t.test_id}','${esc(t.name)}','${t.price}')">
                   Book
                 </button>
               </div>
-            </div>
-          `).join("")
-        : `<p style="font-size: 0.8rem; color: var(--text-dim);">No tests registered at this centre.</p>`;
+            </div>`).join("")
+        : `<p style="font-size:12px;color:var(--text-3);">No tests configured at this centre.</p>`;
 
       return `
         <div class="centre-card">
           <div class="centre-header">
             <div>
-              <h3 class="centre-name">${centre.name}</h3>
-              <p class="centre-address">📍 ${centre.address}</p>
+              <div class="centre-name">${centre.name}</div>
+              <div class="centre-address">${centre.address}</div>
             </div>
-            <span class="centre-city">${centre.city}</span>
+            <span class="city-tag">${centre.city}</span>
           </div>
-          <div class="centre-tests-list">
-            <h5 style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.25rem;">Available Diagnostic Tests:</h5>
-            ${testsHtml}
+          <div>
+            <div class="tests-section-label">Available Tests</div>
+            <div class="tests-list">${tests}</div>
           </div>
-        </div>
-      `;
+        </div>`;
     }));
 
-    container.innerHTML = cardsHtml.join("");
+    el.innerHTML = cards.join("");
   } catch (err) {
-    container.innerHTML = `<div style="grid-column: 1/-1; color: var(--danger); text-align: center;">Error: ${err.message}</div>`;
+    el.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:48px;color:var(--status-failed-text);">Error: ${err.message}</div>`;
   }
 }
 
-// --- Bookings Manager ---
+// ── Bookings ──
 async function loadBookings() {
-  const statusFilter = document.getElementById("status-filter").value;
-  const container = document.getElementById("bookings-container");
-  container.innerHTML = `<div style="text-align: center; color: var(--text-dim); padding: 2rem;">Loading bookings...</div>`;
+  const status = document.getElementById("status-filter").value;
+  const el = document.getElementById("bookings-container");
+  el.innerHTML = `<div class="empty-state"><p>Loading bookings…</p></div>`;
 
   try {
-    const url = statusFilter ? `/api/v1/bookings/?status=${statusFilter}` : `/api/v1/bookings/`;
-    const res = await fetch(url, {
-      headers: { "Authorization": `Bearer ${authToken}` }
-    });
-
+    const url = status ? `/api/v1/bookings/?status=${status}` : `/api/v1/bookings/`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${authToken}` } });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || "Failed to load bookings.");
+    if (!res.ok) throw new Error(data.detail);
 
-    if (!data.items || data.items.length === 0) {
-      container.innerHTML = `
-        <div class="card" style="text-align: center; padding: 3rem;">
-          <p style="color: var(--text-muted); font-size: 1rem;">No bookings found.</p>
-          <button class="btn btn-primary" style="margin-top: 1rem;" onclick="switchTab('tab-catalog')">Browse Tests to Book</button>
-        </div>
-      `;
+    if (!data.items?.length) {
+      el.innerHTML = `
+        <div class="empty-state">
+          <p>No bookings found.</p>
+          <button class="btn btn-primary btn-sm" onclick="switchTab('tab-catalog')">Browse Tests</button>
+        </div>`;
       return;
     }
 
-    const cardsHtml = await Promise.all(data.items.map(async (b) => {
-      // Get detailed booking
-      const dRes = await fetch(`/api/v1/bookings/${b.id}`, {
-        headers: { "Authorization": `Bearer ${authToken}` }
-      });
-      const d = dRes.ok ? await dRes.json() : b;
+    const cards = await Promise.all(data.items.map(async b => {
+      const dr = await fetch(`/api/v1/bookings/${b.id}`, { headers: { Authorization: `Bearer ${authToken}` } });
+      const d  = dr.ok ? await dr.json() : b;
 
-      const appDate = new Date(b.appointment_time).toLocaleString();
-      const statusBadgeClass = `badge-${b.status.toLowerCase()}`;
-
-      const showPayBtn = b.status === "PENDING" || b.status === "FAILED";
-      const showCancelBtn = b.status === "PENDING" || b.status === "CONFIRMED";
+      const dt   = new Date(b.appointment_time).toLocaleString("en-IN", { dateStyle:"medium", timeStyle:"short" });
+      const badgeClass = `badge-${b.status.toLowerCase()}`;
+      const showPay    = b.status === "PENDING";
+      const showCancel = b.status === "PENDING" || b.status === "CONFIRMED";
 
       return `
         <div class="booking-card">
-          <div class="booking-main">
-            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
-              <h4>${d.test_name || "Diagnostic Test"}</h4>
-              <span class="badge ${statusBadgeClass}">${b.status}</span>
+          <div class="booking-left">
+            <div class="booking-title">
+              <span>${d.test_name || "Diagnostic Test"}</span>
+              <span class="badge ${badgeClass}">${b.status}</span>
             </div>
-            <p style="font-size: 0.85rem; color: #38bdf8;">🏥 ${d.centre_name || "Centre"} (${d.centre_city || ""})</p>
+            <div class="booking-centre">${d.centre_name || "Centre"} &middot; ${d.centre_city || ""}</div>
             <div class="booking-meta">
-              <span>🗓️ ${appDate}</span>
-              <span>💵 ₹${parseFloat(b.amount).toFixed(2)}</span>
-              <span style="font-family: monospace; font-size: 0.75rem; color: var(--text-dim);">ID: ${b.id.substring(0, 8)}...</span>
+              <div class="booking-meta-item"><span>Date</span> <strong>${dt}</strong></div>
+              <div class="booking-meta-item"><span>Amount</span> <strong>&#x20B9;${parseFloat(b.amount).toFixed(2)}</strong></div>
+              <div class="booking-meta-item" style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-3);">${b.id.slice(0,8)}…</div>
             </div>
           </div>
-
           <div class="booking-actions">
-            ${showPayBtn ? `
-              <button class="btn btn-success btn-sm" onclick="triggerQuickPay('${b.id}')">
-                💳 Pay ₹${parseFloat(b.amount).toFixed(2)}
-              </button>
-            ` : ""}
-            <button class="btn btn-secondary btn-sm" onclick="populateWebhookTester('${b.id}')">
-              ⚡ Webhook
-            </button>
-            ${showCancelBtn ? `
-              <button class="btn btn-danger btn-sm" onclick="cancelBooking('${b.id}')">
-                Cancel
-              </button>
-            ` : ""}
+            ${showPay ? `<button class="btn btn-primary btn-sm" onclick="triggerQuickPay('${b.id}')">Pay &#x20B9;${parseFloat(b.amount).toFixed(2)}</button>` : ""}
+            <button class="btn btn-ghost btn-sm" onclick="populateWebhookTester('${b.id}')">Webhook</button>
+            ${showCancel ? `<button class="btn btn-danger btn-sm" onclick="cancelBooking('${b.id}')">Cancel</button>` : ""}
           </div>
-        </div>
-      `;
+        </div>`;
     }));
 
-    container.innerHTML = cardsHtml.join("");
+    el.innerHTML = cards.join("");
   } catch (err) {
-    container.innerHTML = `<div class="card" style="color: var(--danger); text-align: center;">Error: ${err.message}</div>`;
+    el.innerHTML = `<div class="empty-state"><p style="color:var(--status-failed-text)">Error: ${err.message}</p></div>`;
   }
 }
 
-// --- Booking Creation Modal ---
+async function cancelBooking(id) {
+  if (!confirm("Cancel this booking?")) return;
+  try {
+    const res = await fetch(`/api/v1/bookings/${id}/cancel`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${authToken}` }
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.detail);
+    toast("Booking cancelled.", "info");
+    loadBookings();
+  } catch (err) {
+    toast(err.message, "error");
+  }
+}
+
+// ── Booking Modal ──
 function openBookingModal(centreId, centreName, testId, testName, price) {
   document.getElementById("modal-centre-id").value = centreId;
-  document.getElementById("modal-test-id").value = testId;
+  document.getElementById("modal-test-id").value   = testId;
   document.getElementById("modal-centre-name").value = centreName;
-  document.getElementById("modal-test-name").value = testName;
+  document.getElementById("modal-test-name").value   = testName;
   document.getElementById("modal-price").value = `₹${parseFloat(price).toFixed(2)}`;
-  
-  setDefaultAppointmentTime();
+  setDefaultDatetime();
   document.getElementById("booking-modal").classList.add("active");
 }
 
@@ -281,75 +247,38 @@ function closeBookingModal() {
   document.getElementById("booking-modal").classList.remove("active");
 }
 
-function setDefaultAppointmentTime() {
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 2);
-  tomorrow.setHours(10, 0, 0, 0);
-  
-  const iso = tomorrow.toISOString().slice(0, 16);
-  const input = document.getElementById("modal-datetime");
-  if (input) input.value = iso;
+function setDefaultDatetime() {
+  const dt = new Date();
+  dt.setDate(dt.getDate() + 2);
+  dt.setHours(10, 0, 0, 0);
+  const el = document.getElementById("modal-datetime");
+  if (el) el.value = dt.toISOString().slice(0, 16);
 }
 
 async function submitBooking() {
   const centreId = document.getElementById("modal-centre-id").value;
-  const testId = document.getElementById("modal-test-id").value;
-  const datetime = document.getElementById("modal-datetime").value;
-  const notes = document.getElementById("modal-notes").value;
-
-  if (!datetime) {
-    showToast("Please choose an appointment date and time.", "error");
-    return;
-  }
+  const testId   = document.getElementById("modal-test-id").value;
+  const dt       = document.getElementById("modal-datetime").value;
+  const notes    = document.getElementById("modal-notes").value;
+  if (!dt) { toast("Please select an appointment time.", "error"); return; }
 
   try {
     const res = await fetch("/api/v1/bookings/", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${authToken}`
-      },
-      body: JSON.stringify({
-        centre_id: centreId,
-        test_id: testId,
-        appointment_time: new Date(datetime).toISOString(),
-        notes: notes || undefined
-      })
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
+      body: JSON.stringify({ centre_id: centreId, test_id: testId, appointment_time: new Date(dt).toISOString(), notes: notes || undefined })
     });
-
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.detail || "Booking failed.");
-    }
-
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.detail);
     closeBookingModal();
-    showToast("Booking created successfully in PENDING state!", "success");
+    toast("Booking created — status PENDING.", "success");
     switchTab("tab-bookings");
   } catch (err) {
-    showToast(err.message, "error");
+    toast(err.message, "error");
   }
 }
 
-async function cancelBooking(bookingId) {
-  if (!confirm("Are you sure you want to cancel this booking?")) return;
-
-  try {
-    const res = await fetch(`/api/v1/bookings/${bookingId}/cancel`, {
-      method: "POST",
-      headers: { "Authorization": `Bearer ${authToken}` }
-    });
-
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || "Cancellation failed.");
-
-    showToast("Booking cancelled successfully.", "info");
-    loadBookings();
-  } catch (err) {
-    showToast(err.message, "error");
-  }
-}
-
-// --- Payment Simulator ---
+// ── Payment Simulator ──
 function triggerQuickPay(bookingId) {
   document.getElementById("sim-booking-id").value = bookingId;
   generateSimIdempKey();
@@ -357,58 +286,36 @@ function triggerQuickPay(bookingId) {
 }
 
 function generateSimIdempKey() {
-  const key = `idemp_${Math.random().toString(36).substring(2, 10)}`;
-  document.getElementById("sim-idemp-key").value = key;
+  document.getElementById("sim-idemp-key").value = `idemp_${rand()}`;
 }
 
 async function submitSimulatedPayment() {
   const bookingId = document.getElementById("sim-booking-id").value.trim();
-  const method = document.getElementById("sim-payment-method").value;
-  const forceStatus = document.getElementById("sim-outcome").value;
-  const idempKey = document.getElementById("sim-idemp-key").value.trim();
-  const outputEl = document.getElementById("sim-payment-response");
+  const method    = document.getElementById("sim-payment-method").value;
+  const outcome   = document.getElementById("sim-outcome").value;
+  const idempKey  = document.getElementById("sim-idemp-key").value.trim();
+  const out       = document.getElementById("sim-payment-response");
 
-  if (!bookingId) {
-    showToast("Please provide a Booking ID.", "error");
-    return;
-  }
-
-  outputEl.textContent = "Processing simulated transaction...";
+  if (!bookingId) { toast("Booking ID is required.", "error"); return; }
+  out.textContent = "Processing…";
 
   try {
     const res = await fetch("/payments/", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${authToken}`
-      },
-      body: JSON.stringify({
-        booking_id: bookingId,
-        payment_method: method,
-        force_status: forceStatus,
-        idempotency_key: idempKey || undefined
-      })
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
+      body: JSON.stringify({ booking_id: bookingId, payment_method: method, force_status: outcome, idempotency_key: idempKey || undefined })
     });
-
-    const data = await res.json();
-    outputEl.textContent = JSON.stringify(data, null, 2);
-
-    if (res.ok) {
-      if (data.status === "SUCCESS") {
-        showToast("Payment Successful! Booking status is now CONFIRMED.", "success");
-      } else {
-        showToast("Simulated Payment Failed. Booking status is FAILED.", "error");
-      }
-    } else {
-      showToast(data.detail || "Payment failed.", "error");
-    }
+    const d = await res.json();
+    out.textContent = JSON.stringify(d, null, 2);
+    if (!res.ok) throw new Error(d.detail);
+    toast(d.status === "SUCCESS" ? "Payment successful — booking CONFIRMED." : "Payment failed — booking FAILED.", d.status === "SUCCESS" ? "success" : "error");
   } catch (err) {
-    outputEl.textContent = `Error: ${err.message}`;
-    showToast(err.message, "error");
+    out.textContent = `Error: ${err.message}`;
+    toast(err.message, "error");
   }
 }
 
-// --- Webhook & Idempotency Lab ---
+// ── Webhook Lab ──
 function populateWebhookTester(bookingId) {
   document.getElementById("wh-booking-id").value = bookingId;
   generateWebhookEventId();
@@ -416,101 +323,64 @@ function populateWebhookTester(bookingId) {
 }
 
 function generateWebhookEventId() {
-  const id = `evt_sim_${Math.random().toString(36).substring(2, 10)}`;
-  document.getElementById("wh-event-id").value = id;
+  document.getElementById("wh-event-id").value = `evt_${rand()}`;
 }
 
 async function sendWebhookOnce() {
-  const eventId = document.getElementById("wh-event-id").value.trim();
-  const bookingId = document.getElementById("wh-booking-id").value.trim();
-  const statusOutcome = document.getElementById("wh-status").value;
-  const logEl = document.getElementById("webhook-audit-log");
+  const log = document.getElementById("webhook-audit-log");
+  const payload = buildWebhookPayload();
+  if (!payload) return;
+  log.textContent = `[Attempt #1] Sending…\n\nPayload:\n${JSON.stringify(payload, null, 2)}`;
 
-  if (!bookingId || !eventId) {
-    showToast("Event ID and Booking ID are required.", "error");
-    return;
-  }
-
-  const payload = {
-    event_id: eventId,
-    event_type: statusOutcome === "SUCCESS" ? "payment.succeeded" : "payment.failed",
-    data: {
-      booking_id: bookingId,
-      amount: 499.00,
-      transaction_ref: `txn_wh_${Math.random().toString(36).substring(2, 8)}`,
-      status: statusOutcome
-    }
-  };
-
-  logEl.textContent = `[Request Payload]:\n${JSON.stringify(payload, null, 2)}\n\nSending webhook...`;
-
-  try {
-    const res = await fetch("/payments/webhook/", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-
-    const data = await res.json();
-    logEl.textContent += `\n\n[HTTP ${res.status} Response]:\n${JSON.stringify(data, null, 2)}`;
-    
-    if (res.ok) {
-      if (data.status === "duplicate_ignored") {
-        showToast("Duplicate Webhook Ignored Safely (Idempotent)!", "info");
-      } else {
-        showToast(`Webhook Processed! Booking is ${data.booking_status}`, "success");
-      }
-    } else {
-      showToast(data.detail || "Webhook delivery failed.", "error");
-    }
-  } catch (err) {
-    logEl.textContent += `\n\n[Error]: ${err.message}`;
-  }
+  const { res, d } = await deliverWebhook(payload);
+  log.textContent += `\n\nHTTP ${res.status} → ${JSON.stringify(d, null, 2)}`;
+  toast(d.status === "duplicate_ignored" ? "Duplicate safely ignored." : `Webhook processed. Booking: ${d.booking_status}`, d.status === "duplicate_ignored" ? "info" : "success");
 }
 
 async function testIdempotency3x() {
-  const eventId = document.getElementById("wh-event-id").value.trim();
-  const bookingId = document.getElementById("wh-booking-id").value.trim();
-  const statusOutcome = document.getElementById("wh-status").value;
-  const logEl = document.getElementById("webhook-audit-log");
+  const log = document.getElementById("webhook-audit-log");
+  const payload = buildWebhookPayload();
+  if (!payload) return;
 
-  if (!bookingId || !eventId) {
-    showToast("Event ID and Booking ID are required.", "error");
-    return;
-  }
-
-  const payload = {
-    event_id: eventId,
-    event_type: statusOutcome === "SUCCESS" ? "payment.succeeded" : "payment.failed",
-    data: {
-      booking_id: bookingId,
-      amount: 499.00,
-      transaction_ref: `txn_idemp_test`,
-      status: statusOutcome
-    }
-  };
-
-  logEl.textContent = `=== 🛡️ INITIATING STRICT IDEMPOTENCY TEST (3 Sequential Deliveries) ===\n\n`;
+  log.textContent = `=== Strict Idempotency Test: 3 sequential deliveries of the same event_id ===\n\nPayload:\n${JSON.stringify(payload, null, 2)}\n\n`;
 
   for (let i = 1; i <= 3; i++) {
-    logEl.textContent += `--- [Delivery Attempt #${i}] ---\n`;
-    try {
-      const res = await fetch("/payments/webhook/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-      logEl.textContent += `Status: HTTP ${res.status} | Result: ${data.status}\nMessage: ${data.message}\n\n`;
-    } catch (err) {
-      logEl.textContent += `Attempt ${i} Failed: ${err.message}\n\n`;
-    }
+    log.textContent += `--- Attempt #${i} ---\n`;
+    const { res, d } = await deliverWebhook(payload);
+    log.textContent += `HTTP ${res.status} | status: ${d.status}\nmessage: ${d.message}\n\n`;
   }
 
-  logEl.textContent += `=== 🛡️ TEST COMPLETE: Only Attempt #1 modified state; Attempts #2 and #3 safely de-duplicated! ===`;
-  showToast("Idempotency Test Passed! Repeated deliveries safely ignored.", "success");
+  log.textContent += `=== Result: Only Attempt #1 modified state.\n    Attempts #2 and #3 returned "duplicate_ignored" without side effects. ===`;
+  toast("Idempotency test complete.", "success");
 }
 
-function escapeHtml(str) {
+function buildWebhookPayload() {
+  const eventId   = document.getElementById("wh-event-id").value.trim();
+  const bookingId = document.getElementById("wh-booking-id").value.trim();
+  const status    = document.getElementById("wh-status").value;
+  if (!eventId || !bookingId) { toast("Event ID and Booking ID are required.", "error"); return null; }
+  return {
+    event_id:   eventId,
+    event_type: status === "SUCCESS" ? "payment.succeeded" : "payment.failed",
+    data: { booking_id: bookingId, amount: 499.00, transaction_ref: `txn_wh_${rand()}`, status }
+  };
+}
+
+async function deliverWebhook(payload) {
+  const res = await fetch("/payments/webhook/", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  const d = await res.json();
+  return { res, d };
+}
+
+// ── Utilities ──
+function rand() {
+  return Math.random().toString(36).substring(2, 10);
+}
+
+function esc(str) {
   return str.replace(/'/g, "\\'").replace(/"/g, "&quot;");
 }

@@ -219,6 +219,52 @@ pytest --cov=app --cov-report=term-missing
 
 ---
 
+## Cloud Deployment Guide (Render vs. Vercel)
+
+Both **Render** and **Vercel** configurations are pre-configured in this repository.
+
+### Comparison: Which should you choose?
+
+| Feature | Render (Recommended for Backend) | Vercel (Serverless / Direct Preview) |
+| :--- | :--- | :--- |
+| **Execution Model** | Continuous Web Server (Uvicorn) | Serverless Functions (`@vercel/python`) |
+| **Database** | Native Free PostgreSQL or SQLite | Requires Hosted DB (e.g. Neon.tech / Supabase) |
+| **Static + API** | Serves interactive UI + API + Swagger seamlessly | Direct CDN URL (`xxx.vercel.app`) |
+| **Configuration** | `render.yaml` or Web Service | `vercel.json` + `api/index.py` |
+
+---
+
+### Option 1: Deploy to Render (Recommended for full backend & DB)
+
+1. Push your repository to GitHub.
+2. Sign in to [Render](https://render.com) and click **New +** -> **Web Service** (or use the Blueprint with `render.yaml`).
+3. Connect your GitHub repository.
+4. Set the following build settings:
+   - **Environment**: `Python 3`
+   - **Build Command**: `pip install -r requirements.txt && python seed_data.py`
+   - **Start Command**: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+5. *(Optional)* Add a free **Render PostgreSQL** database and set `DATABASE_URL` in environment variables. If omitted, the service runs out-of-the-box with SQLite.
+6. Click **Deploy**. Your service will be live at `https://<service-name>.onrender.com`!
+   - Dashboard: `https://<service-name>.onrender.com/`
+   - Swagger Docs: `https://<service-name>.onrender.com/docs`
+
+---
+
+### Option 2: Deploy to Vercel (Fastest direct link)
+
+The project includes `vercel.json` and `api/index.py` for direct Vercel deployment:
+
+1. Push the code to GitHub.
+2. Go to [Vercel](https://vercel.com) -> **Add New Project** -> import this repository.
+3. In **Environment Variables**, add:
+   - `DATABASE_URL`: Your hosted PostgreSQL connection string (get a free one in 30 seconds at [Neon.tech](https://neon.tech) or [Supabase](https://supabase.com)).
+   - `SECRET_KEY`: Any secure random string (e.g. `eve-production-secret-jwt-key-2026`).
+   - `CACHE_ENABLED`: `false` (or set `REDIS_URL` if using Upstash Redis).
+4. Click **Deploy**. Vercel will build the serverless Python handler and provide a live `https://<project-name>.vercel.app` URL immediately.
+
+---
+
+
 ## API Endpoints & cURL Examples
 
 Default seeded users available for testing:
