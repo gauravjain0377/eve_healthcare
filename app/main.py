@@ -56,6 +56,19 @@ app = FastAPI(
 )
 
 # Middleware
+@app.middleware("http")
+async def fix_vercel_path(request: Request, call_next):
+    # When Vercel rewrites routes to /api/index.py, resolve real requested path
+    path = request.scope.get("path", "")
+    if path.startswith("/api/index.py"):
+        matched = request.headers.get("x-matched-path")
+        if matched and not matched.startswith("/api/index.py"):
+            request.scope["path"] = matched
+        else:
+            stripped = path[len("/api/index.py"):]
+            request.scope["path"] = stripped if stripped else "/"
+    return await call_next(request)
+
 app.add_middleware(RequestIDMiddleware)
 app.add_middleware(
     CORSMiddleware,
