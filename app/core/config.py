@@ -34,6 +34,23 @@ class Settings(BaseSettings):
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["*"]
 
+    @field_validator("DATABASE_URL", mode="after")
+    @classmethod
+    def validate_database_url(cls, v: str) -> str:
+        import os
+        # Vercel serverless environment root filesystem is read-only; use /tmp for default SQLite
+        if os.environ.get("VERCEL") and v.startswith("sqlite:///."):
+            return "sqlite:////tmp/eve_healthcare.db"
+        return v
+
+    @field_validator("CACHE_ENABLED", mode="after")
+    @classmethod
+    def validate_cache_enabled(cls, v: bool) -> bool:
+        import os
+        if os.environ.get("VERCEL") and not os.environ.get("REDIS_URL"):
+            return False
+        return v
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

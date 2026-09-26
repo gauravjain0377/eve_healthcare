@@ -23,6 +23,11 @@ async def lifespan(app: FastAPI):
     # Startup: ensure tables exist
     logger.info("Initializing database tables...")
     Base.metadata.create_all(bind=engine)
+    try:
+        from seed_data import seed
+        seed()
+    except Exception as e:
+        logger.warning(f"Auto-seed check: {e}")
     logger.info("EVE Healthcare Backend Service initialized successfully.")
     yield
     logger.info("Shutting down EVE Healthcare Backend Service.")
