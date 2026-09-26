@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     
     # Security
-    SECRET_KEY: str = "super-secret-key-change-in-production-eve-healthcare-2026"
+    SECRET_KEY: str = "eve_secret_jwt_key_super_secure_2026"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
     
