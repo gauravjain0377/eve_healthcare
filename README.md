@@ -25,11 +25,12 @@ Production-ready backend service for diagnostic test bookings and simulated paym
    - [3. Booking System](#3-booking-system)
    - [4. Simulated Payment Service](#4-simulated-payment-service)
    - [5. Payment Webhook (Strict Idempotency)](#5-payment-webhook-strictly-idempotent)
-6. [Interactive Swagger / OpenAPI Documentation](#interactive-swagger--openapi-documentation)
-7. [Edge Cases Handled](#edge-cases-handled)
-8. [Bonus Engineering Features Implemented](#bonus-engineering-features-implemented)
-9. [Important Assumptions Made](#important-assumptions-made)
-10. [Future Improvements](#what-we-would-improve-with-more-time)
+6. [Interactive Web UI Dashboard](#interactive-web-ui-dashboard)
+7. [Interactive Swagger / OpenAPI Documentation](#interactive-swagger--openapi-documentation)
+8. [Edge Cases Handled](#edge-cases-handled)
+9. [Bonus Engineering Features Implemented](#bonus-engineering-features-implemented)
+10. [Important Assumptions Made](#important-assumptions-made)
+11. [Future Improvements](#what-we-would-improve-with-more-time)
 
 ---
 
@@ -382,6 +383,18 @@ If you execute the exact same curl request a 2nd or 3rd time:
 2. No duplicate booking modifications.
 3. No race condition state corruption.
 4. HTTP 200 OK returned immediately to acknowledge gateway delivery.
+
+---
+
+## Interactive Web UI Dashboard
+
+A single-page web dashboard is served directly at **`http://localhost:8000/`**:
+
+- **🏥 Centres & Tests Catalog**: Visual cards with city filter, available tests list, turnaround hours, and instant 1-click booking modal.
+- **📅 Appointments & Bookings**: Real-time management of bookings with status badges (`PENDING`, `CONFIRMED`, `FAILED`, `CANCELLED`), cancellation triggers, and quick payment buttons.
+- **💳 Simulated Payment Gateway**: Interactive payment simulator (`POST /payments/`) testing `SUCCESS`/`FAILED` outcomes, payment methods, and client idempotency keys with formatted JSON responses.
+- **⚡ Webhook & Idempotency Lab**: Real-time test playground to fire payment gateway webhooks (`POST /payments/webhook/`) and click **"Test Idempotency (3x in a row)"** to observe sequential deliveries safely de-duplicated without state corruption.
+- **🔑 Role Switcher**: 1-click toggle between pre-seeded Patient and Admin accounts, or register new user accounts.
 
 ---
 

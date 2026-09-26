@@ -91,9 +91,17 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     )
 
 
-# Health Check
+import os
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+# Static Files & Web UI Dashboard
+if os.path.isdir("static"):
+    app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+# Health & Dashboard Endpoints
 @app.get("/health", tags=["System"])
-@app.get("/", tags=["System"])
 def health_check():
     return {
         "status": "healthy",
@@ -101,6 +109,18 @@ def health_check():
         "version": settings.VERSION,
         "environment": settings.ENVIRONMENT,
         "redis_connected": cache._is_redis_available
+    }
+
+
+@app.get("/", tags=["System"], include_in_schema=False)
+@app.get("/dashboard", tags=["System"], include_in_schema=False)
+def dashboard():
+    if os.path.exists("static/index.html"):
+        return FileResponse("static/index.html")
+    return {
+        "status": "healthy",
+        "service": settings.PROJECT_NAME,
+        "version": settings.VERSION
     }
 
 
